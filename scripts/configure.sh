@@ -37,11 +37,6 @@ while [[ $# -gt 0 ]]; do
     shift
     shift
     ;;
-  --plannermodel)
-    PLANNER_MODEL="$2"
-    shift
-    shift
-    ;;
   -fc | --frontend-clientid)
     FRONTEND_CLIENT_ID="$2"
     shift
@@ -111,16 +106,10 @@ if [ "$AI_SERVICE" = "$ENV_OPEN_AI" ]; then
   if [ -z "$COMPLETION_MODEL" ]; then
     COMPLETION_MODEL="$ENV_COMPLETION_MODEL_OPEN_AI"
   fi
-  if [ -z "$PLANNER_MODEL" ]; then
-    PLANNER_MODEL="$ENV_PLANNER_MODEL_OPEN_AI"
-  fi
   # TO DO: Validate model values if set by command line.
 else # elif [ "$AI_SERVICE" = "$ENV_AZURE_OPEN_AI" ]; then
   if [ -z "$COMPLETION_MODEL" ]; then
     COMPLETION_MODEL="$ENV_COMPLETION_MODEL_AZURE_OPEN_AI"
-  fi
-  if [ -z "$PLANNER_MODEL" ]; then
-    PLANNER_MODEL="$ENV_PLANNER_MODEL_AZURE_OPEN_AI"
   fi
   # TO DO: Validate model values if set by command line.
 fi
@@ -158,7 +147,7 @@ WEBAPI_PROJECT_PATH="${SCRIPT_DIRECTORY}/../webapi"
 
 echo "Setting 'APIKey' user secret for $AI_SERVICE..."
 if [ "$AI_SERVICE" = "$ENV_OPEN_AI" ]; then
-  dotnet user-secrets set --project $WEBAPI_PROJECT_PATH SemanticMemory:Services:OpenAI:APIKey $API_KEY
+  dotnet user-secrets set --project $WEBAPI_PROJECT_PATH KernelMemory:Services:OpenAI:APIKey $API_KEY
   if [ $? -ne 0 ]; then exit 1; fi
   AISERVICE_OVERRIDES="{
     \"OpenAI\":
@@ -168,9 +157,9 @@ if [ "$AI_SERVICE" = "$ENV_OPEN_AI" ]; then
       }
     }"
 else
-  dotnet user-secrets set --project $WEBAPI_PROJECT_PATH SemanticMemory:Services:AzureOpenAIText:APIKey $API_KEY
+  dotnet user-secrets set --project $WEBAPI_PROJECT_PATH KernelMemory:Services:AzureOpenAIText:APIKey $API_KEY
   if [ $? -ne 0 ]; then exit 1; fi
-  dotnet user-secrets set --project $WEBAPI_PROJECT_PATH SemanticMemory:Services:AzureOpenAIEmbedding:APIKey $API_KEY
+  dotnet user-secrets set --project $WEBAPI_PROJECT_PATH KernelMemory:Services:AzureOpenAIEmbedding:APIKey $API_KEY
   if [ $? -ne 0 ]; then exit 1; fi
   AISERVICE_OVERRIDES="{
     \"AzureOpenAIText\": {
@@ -194,10 +183,7 @@ APPSETTINGS_OVERRIDES="{
       \"Scopes\": \"${ENV_SCOPES}\"
     }
   },
-  \"Planner\": {
-    \"Model\": \"${PLANNER_MODEL}\"
-  },
-  \"SemanticMemory\": {
+  \"KernelMemory\": {
     \"TextGeneratorType\": \"${AI_SERVICE}\",
     \"DataIngestion\": {
       \"EmbeddingGeneratorTypes\": [\"${AI_SERVICE}\"]

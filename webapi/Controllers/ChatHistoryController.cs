@@ -12,7 +12,7 @@ using CopilotChat.WebApi.Models.Request;
 using CopilotChat.WebApi.Models.Response;
 using CopilotChat.WebApi.Models.Storage;
 using CopilotChat.WebApi.Options;
-using CopilotChat.WebApi.Skills.Utils;
+using CopilotChat.WebApi.Plugins.Utils;
 using CopilotChat.WebApi.Storage;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -20,7 +20,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticMemory;
+using Microsoft.KernelMemory;
 
 namespace CopilotChat.WebApi.Controllers;
 
@@ -37,7 +37,7 @@ public class ChatHistoryController : ControllerBase
     private const string GetChatRoute = "GetChatRoute";
 
     private readonly ILogger<ChatHistoryController> _logger;
-    private readonly ISemanticMemoryClient _memoryClient;
+    private readonly IKernelMemory _memoryClient;
     private readonly ChatSessionRepository _sessionRepository;
     private readonly ChatMessageRepository _messageRepository;
     private readonly ChatParticipantRepository _participantRepository;
@@ -58,7 +58,7 @@ public class ChatHistoryController : ControllerBase
     /// <param name="authInfo">The auth info for the current request.</param>
     public ChatHistoryController(
         ILogger<ChatHistoryController> logger,
-        ISemanticMemoryClient memoryClient,
+        IKernelMemory memoryClient,
         ChatSessionRepository sessionRepository,
         ChatMessageRepository messageRepository,
         ChatParticipantRepository participantRepository,
@@ -98,7 +98,7 @@ public class ChatHistoryController : ControllerBase
         await this._sessionRepository.CreateAsync(newChat);
 
         // Create initial bot message
-        var chatMessage = ChatMessage.CreateBotResponseMessage(
+        var chatMessage = CopilotChatMessage.CreateBotResponseMessage(
             newChat.Id,
             this._promptOptions.InitialBotMessage,
             string.Empty, // The initial bot message doesn't need a prompt.
@@ -169,12 +169,12 @@ public class ChatHistoryController : ControllerBase
     }
 
     /// <summary>
-    /// Get all chat messages for a chat session.
-    /// The list will be ordered with the first entry being the most recent message.
+    /// Get chat messages for a chat session.
+    /// Messages are returned ordered from most recent to oldest.
     /// </summary>
     /// <param name="chatId">The chat id.</param>
-    /// <param name="startIdx">The start index at which the first message will be returned.</param>
-    /// <param name="count">The number of messages to return. -1 will return all messages starting from startIdx.</param>
+    /// <param name="skip">Number of messages to skip before starting to return messages.</param>
+    /// <param name="count">The number of messages to return. -1 returns all messages.</param>
     [HttpGet]
     [Route("chats/{chatId:guid}/messages")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -183,18 +183,14 @@ public class ChatHistoryController : ControllerBase
     [Authorize(Policy = AuthPolicyName.RequireChatParticipant)]
     public async Task<IActionResult> GetChatMessagesAsync(
         [FromRoute] Guid chatId,
-        [FromQuery] int startIdx = 0,
+        [FromQuery] int skip = 0,
         [FromQuery] int count = -1)
     {
-        // TODO:  [Issue #48] the code mixes strings and Guid without being explicit about the serialization format
-        var chatMessages = await this._messageRepository.FindByChatIdAsync(chatId.ToString());
+        var chatMessages = await this._messageRepository.FindByChatIdAsync(chatId.ToString(), skip, count);
         if (!chatMessages.Any())
         {
             return this.NotFound($"No messages found for chat id '{chatId}'.");
         }
-
-        chatMessages = chatMessages.OrderByDescending(m => m.Timestamp).Skip(startIdx);
-        if (count >= 0) { chatMessages = chatMessages.Take(count); }
 
         return this.Ok(chatMessages);
     }
@@ -218,7 +214,7 @@ public class ChatHistoryController : ControllerBase
         if (await this._sessionRepository.TryFindByIdAsync(chatId.ToString(), callback: v => chat = v))
         {
             chat!.Title = chatParameters.Title ?? chat!.Title;
-            chat!.SystemDescription = chatParameters.SystemDescription ?? chat!.SystemDescription;
+            chat!.SystemDescription = chatParameters.SystemDescription ?? chat!.SafeSystemDescription;
             chat!.MemoryBalance = chatParameters.MemoryBalance ?? chat!.MemoryBalance;
             await this._sessionRepository.UpsertAsync(chat);
             await messageRelayHubContext.Clients.Group(chatId.ToString()).SendAsync(ChatEditedClientCall, chat);

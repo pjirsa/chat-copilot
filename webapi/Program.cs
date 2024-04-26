@@ -44,15 +44,13 @@ public sealed class Program
             .AddOptions(builder.Configuration)
             .AddPersistentChatStore()
             .AddPlugins(builder.Configuration)
-            .AddUtilities()
-            .AddCopilotChatAuthentication(builder.Configuration)
-            .AddCopilotChatAuthorization();
+            .AddChatCopilotAuthentication(builder.Configuration)
+            .AddChatCopilotAuthorization();
 
         // Configure and add semantic services
         builder
             .AddBotConfig()
             .AddSemanticKernelServices()
-            .AddPlannerServices()
             .AddSemanticMemoryServices();
 
         // Add SignalR as the real time relay service
@@ -67,6 +65,9 @@ public sealed class Program
             .AddSingleton<ITelemetryService, AppInsightsTelemetryService>();
 
         TelemetryDebugWriter.IsTracingDisabled = Debugger.IsAttached;
+
+        // Add named HTTP clients for IHttpClientFactory
+        builder.Services.AddHttpClient();
 
         // Add in the rest of the services.
         builder.Services
